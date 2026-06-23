@@ -61,8 +61,8 @@ change-of-variables Jacobian for $u = \log \sigma$. The gradient is validated
 against finite differences in the test suite, so the dynamics are driven by a
 gradient that is known to be correct.
 
-There is no warm-up and no adaptation. The step size and the metric are fixed
-inputs, chosen once and held constant. The metric here is diagonal, matched to
+There is no warm-up and no adaptation. The step size and the mass matrix are fixed
+inputs, chosen once and held constant. The mass matrix here is diagonal, matched to
 the analytic posterior scales, and the step size was picked to be robustly
 divergence-free across a small grid of priors and seeds. This keeps the sampler
 simple and its behaviour easy to reason about, at the cost of needing a friendly,
@@ -73,19 +73,18 @@ well-scaled target.
 Run four chains and the posterior collapses from the wide prior onto a tight band
 that follows the data. This is the first picture in this README - the sampled
 marginals laid over the closed-form posterior, including the scale as
-$u = \log \sigma$, the space the sampler actually works in. The agreement is not
-only visual:
-every sampled posterior mean is within 0.71 MCSE of its exact value and the
-sampled standard deviations match to within 2%, so the sampler shows no bias and
-the right width. Reading the ensemble of fitted lines as summaries gives the
+$u = \log \sigma$, the space the sampler actually works in. The agreement holds
+quantitatively: every sampled posterior mean is within 0.71 MCSE of its exact
+value and the sampled standard deviations match to within 2%, so the sampler
+shows no bias and the right width. Reading the ensemble of fitted lines as summaries gives the
 posterior mean line, a 90% credible band for the line itself (uncertainty in
 $\beta$ alone) and a wider 90% predictive band that adds the observation noise
 $\sigma$.
 
 ![Posterior predictive: the best line with credible and predictive bands](assets/posterior_predictive.png)
 
-The posterior recovers the generating line and, more importantly, quantifies how
-sure it is about it. Two questions remain: did the sampler actually converge, and
+The posterior recovers the generating line and quantifies how sure it is about
+it. Two questions remain: did the sampler actually converge, and
 is the uncertainty it reports honest.
 
 ## Did it converge?
@@ -100,7 +99,7 @@ The convergence diagnostics are all computed from scratch in
 | bulk ESS (min)        | 5200              | above 400         |
 | tail ESS (min)        | 4291              | above 400         |
 | divergences           | 0                 | at or near 0      |
-| max tree depth        | 3 of a cap of 10  | below the cap     |
+| max tree depth        | 3                 | below the cap of 10 |
 | E-BFMI                | 0.93 to 1.03      | above 0.3         |
 
 The traces are fuzzy horizontal bands with no drift or sticking, and the four
@@ -147,40 +146,6 @@ posteriors that are too narrow, a central hump too wide.
 A flat PIT, coverage on the diagonal and uniform SBC ranks all point the same
 way: the posterior predictive is calibrated on held-out data and the sampler
 recovers the prior-to-posterior map without bias.
-
-## The maths in brief
-
-The model is a conjugate regression with a Normal-Inverse-Gamma prior. With $n$
-observations and $p$ coefficients the closed-form posterior is again
-Normal-Inverse-Gamma:
-
-$$
-\begin{aligned}
-V_n &= (V_0^{-1} + X^\top X)^{-1}, \\
-m_n &= V_n (V_0^{-1} m_0 + X^\top y), \\
-a_n &= a_0 + n/2, \\
-b_n &= b_0 + \tfrac{1}{2}\left( y^\top y + m_0^\top V_0^{-1} m_0 - m_n^\top V_n^{-1} m_n \right).
-\end{aligned}
-$$
-
-Here $X$ is the $n \times p$ design matrix and $y$ the $n$ responses, with $n$
-the number of observations. The prior is fixed by the mean $m_0$ and covariance
-factor $V_0$ of the coefficients, in
-$\beta \mid \sigma^2 \sim \mathcal{N}(m_0, \sigma^2 V_0)$, with shape $a_0$ and
-scale $b_0$ of $\sigma^2 \sim \text{Inverse-Gamma}(a_0, b_0)$. The data updates
-each of these into its posterior counterpart $m_n$, $V_n$, $a_n$ and $b_n$ above.
-
-Sampling is done in $z = (\beta, u)$ with $u = \log \sigma$. The target log density
-adds the Jacobian of the $\sigma^2$ to $u$ map, and the linear-in- $u$ terms
-collapse to a single coefficient $-(n + p + 2 a_0)\,u$:
-
-$$
-\log \pi(z) = -(n + p + 2 a_0)\,u - e^{-2u}\left( \tfrac{1}{2}\lVert y - X\beta \rVert^2 + \tfrac{1}{2}(\beta - m_0)^\top V_0^{-1}(\beta - m_0) + b_0 \right).
-$$
-
-The closed-form moments $\mathbb{E}[\beta \mid y] = m_n$, $\mathrm{Cov}[\beta \mid y] = \dfrac{b_n}{a_n - 1} V_n$
-and $\mathbb{E}[\sigma^2 \mid y] = \dfrac{b_n}{a_n - 1}$ are the reference the acceptance criteria
-score against.
 
 ## Layout
 
