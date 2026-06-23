@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+.env
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.cache/
+.ipynb_checkpoints/
+
+# Run outputs: Parquet runs and figures stay local
+outputs/*
+!outputs/.gitkeep
+
+# Local-only working files, kept out of the published repo
+docs/
+/*.md
+!README.md
