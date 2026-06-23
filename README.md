@@ -171,7 +171,7 @@ scale $b_0$ of $\sigma^2 \sim \text{Inverse-Gamma}(a_0, b_0)$. The data updates
 each of these into its posterior counterpart $m_n$, $V_n$, $a_n$ and $b_n$ above.
 
 Sampling is done in $z = (\beta, u)$ with $u = \log \sigma$. The target log density
-adds the Jacobian of the $\sigma^2$ to $u$ map, and the linear-in-$u$ terms
+adds the Jacobian of the $\sigma^2$ to $u$ map, and the linear-in- $u$ terms
 collapse to a single coefficient $-(n + p + 2 a_0)\,u$:
 
 $$
