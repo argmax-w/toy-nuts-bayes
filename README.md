@@ -31,10 +31,17 @@ Gaussian noise, $y = \beta_0 + \beta_1 x + \varepsilon$.
 
 The prior is a conjugate Normal-Inverse-Gamma pair.
 The prior covariance is set deliberately wide,
-so before any data arrives the model entertains a broad fan of lines and pays no
-attention to where the points actually fall.
+so before any data arrives the model spreads its predictive mass over a broad
+range of outcomes and pays no attention to where the points actually fall.
 
-![Prior predictive: a wide fan of plausible lines](assets/prior_predictive.png)
+![Prior predictive: the density, sample lines and the spread it implies](assets/prior_predictive.png)
+
+Three views of the same prior predictive: the marginal density
+$p(\tilde y \mid \tilde x) = \mathbb{E}_\theta[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{S}\sum_s p(\tilde y \mid \tilde x, \theta_s)$
+with its central 95% interval, the sample lines and the standard deviation each
+draw implies against the observed value. The density averages the Gaussian
+likelihood over the draws, which integrates the observation noise out per draw,
+and the interval inverts the same mixture, so nothing about $\tilde y$ is sampled.
 
 Because the prior is conjugate, the posterior is available in closed form, which
 is the whole point: it gives an exact target to sample against.
@@ -76,12 +83,16 @@ marginals laid over the closed-form posterior, including the scale as
 $u = \log \sigma$, the space the sampler actually works in. The agreement holds
 quantitatively: every sampled posterior mean is within 0.71 MCSE of its exact
 value and the sampled standard deviations match to within 2%, so the sampler
-shows no bias and the right width. Reading the ensemble of fitted lines as summaries gives the
-posterior mean line, a 90% credible band for the line itself (uncertainty in
-$\beta$ alone) and a wider 90% predictive band that adds the observation noise
-$\sigma$.
+shows no bias and the right width.
 
-![Posterior predictive: the best line with credible and predictive bands](assets/posterior_predictive.png)
+The posterior predictive is the same three views as the prior, now averaged over
+the sampler's own draws,
+$p(\tilde y \mid \tilde x) = \mathbb{E}_{\theta \mid y}[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{S}\sum_s p(\tilde y \mid \tilde x, \theta_s)$:
+the density and its central 95% interval, the sample lines and the standard
+deviation each draw implies. The wide prior band has collapsed onto a tight one
+that tracks the data, and the implied spread concentrates on the observed value.
+
+![Posterior predictive: the density, sample draws and the spread it implies](assets/posterior_predictive.png)
 
 The posterior recovers the generating line and quantifies how sure it is about
 it. Two questions remain: did the sampler actually converge, and

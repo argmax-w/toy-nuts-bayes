@@ -73,19 +73,102 @@ def save(fig: plt.Figure, name: str) -> None:
     print("wrote", path.relative_to(PROJECT_ROOT))
 
 
-def fig_prior_predictive(model: LinearGaussian, x, y) -> None:
-    """Lines the weakly informative prior considers plausible, with the data."""
+def _predictive_panels(model, draws, line_draws, x, y, kind) -> None:
+    """Three predictive views: the averaged density, sample lines and the spread.
+
+    The density is the Rao-Blackwellised predictive, the average of the per-draw
+    Gaussian likelihood ``mean_s N(y; x @ beta_s, sigma_s**2)``. The observation
+    noise is integrated out analytically (the Gaussian density, never a sampled
+    ``y``) while the parameter uncertainty is averaged over the draws; for the
+    posterior these are the sampler's own draws. Its 95% interval inverts the same
+    Gaussian-mixture CDF, so nothing about ``y`` is sampled either. The spread panel
+    integrates the noise out too, plotting the population standard deviation each
+    draw implies, ``sqrt(Var(X beta) + sigma**2)``, against the observed value. Only
+    the centre panel shows the draws themselves.
+
+    Args:
+        model: The fitted model, used for the design matrix and the predictions.
+        draws: Constrained ``(beta, sigma)`` draws to average the density and the
+            spread over (prior draws, or the sampler's posterior draws).
+        line_draws: A smaller set of draws shown as sample lines.
+        x: Observed inputs.
+        y: Observed responses.
+        kind: ``"Prior"`` or ``"Posterior"``, used in the titles and filename.
+    """
+    from scipy.special import ndtr
+
     grid_x = np.linspace(-2.8, 2.8, 120)
     grid_X = np.column_stack([np.ones_like(grid_x), grid_x])
-    lines = model.predictive_draws(model.prior_draws(120, np.random.default_rng(11)), grid_X)
 
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.plot(grid_x, lines.T, color="C0", alpha=0.15, lw=0.8)
-    ax.scatter(x, y, s=18, color="k", zorder=3, label="data")
-    ax.plot([], [], color="C0", alpha=0.6, label="prior predictive lines")
-    ax.set(xlabel="x", ylabel="y", title="Prior predictive: what the priors imply")
-    ax.legend()
-    save(fig, "prior_predictive.png")
+    beta, sigma = draws[:, : model.p], draws[:, model.p]
+    means = beta @ grid_X.T  # (S, nx): the line value of each draw
+
+    # Rao-Blackwellised density p(y | x) ~= mean_s N(y; x @ beta_s, sigma_s**2),
+    # one x-column at a time since the full (y, x, draw) tensor is too large. The
+    # 95% interval inverts the mixture CDF, mean_s Phi((y - mean_s) / sigma_s), so
+    # the observation noise is integrated out rather than sampled. The plotting
+    # window spans 3.5 total sds, the mixture's law-of-total-variance spread.
+    mu = means.mean(0)
+    total_sd = np.sqrt((means**2 + (sigma**2)[:, None]).mean(0) - mu**2)
+    y_grid = np.linspace((mu - 3.5 * total_sd).min(), (mu + 3.5 * total_sd).max(), 200)
+    norm = 1.0 / (sigma * np.sqrt(2.0 * np.pi))
+    dens = np.empty((y_grid.size, grid_x.size))
+    lo, hi = np.empty(grid_x.size), np.empty(grid_x.size)
+    for j in range(grid_x.size):
+        z = (y_grid[:, None] - means[:, j][None, :]) / sigma[None, :]
+        dens[:, j] = (np.exp(-0.5 * z**2) * norm[None, :]).mean(axis=1)
+        cdf = ndtr(z).mean(axis=1)
+        lo[j], hi[j] = np.interp([0.025, 0.975], cdf, y_grid)
+    ylim = (y_grid.min(), y_grid.max())
+
+    # Sample lines for the centre panel.
+    lines = model.predictive_draws(line_draws, grid_X)
+
+    # Implied population sd of a dataset with the noise integrated out, one value
+    # per draw: sqrt(Var(X beta) + sigma**2), against the observed sd.
+    implied_sd = np.sqrt((beta @ model.X.T).var(axis=1) + sigma**2)
+    implied_sd = np.sqrt((beta @ model.X.T).var(axis=1) + sigma**2)
+    obs_sd = float(y.std())
+    # An adaptive window so the wide prior and the tight posterior both read well.
+    sd_lo = min(float(np.quantile(implied_sd, 0.005)), obs_sd)
+    sd_hi = max(float(np.quantile(implied_sd, 0.995)), obs_sd)
+    pad = 0.05 * (sd_hi - sd_lo)
+    sd_range = (max(0.0, sd_lo - pad), sd_hi + pad)
+
+    fig, (ax_l, ax_c, ax_r) = plt.subplots(1, 3, figsize=(16, 4.3))
+
+    mesh = ax_l.pcolormesh(grid_x, y_grid, dens, cmap="Blues", shading="auto")
+    fig.colorbar(mesh, ax=ax_l, label="density  p(y | x)")
+    ax_l.plot(grid_x, lo, color="C0", lw=1.2, ls="--", label="95% credible interval")
+    ax_l.plot(grid_x, hi, color="C0", lw=1.2, ls="--")
+    ax_l.scatter(x, y, s=14, color="k", edgecolor="w", linewidth=0.3, zorder=3, label="data")
+    ax_l.set(xlabel="x", ylabel="y", title=f"{kind} predictive density", ylim=ylim)
+    ax_l.legend(loc="upper left", fontsize=8)
+
+    ax_c.plot(grid_x, lines.T, color="C0", alpha=0.15, lw=0.8)
+    ax_c.plot([], [], color="C0", alpha=0.6, label=f"{kind.lower()} predictive lines")
+    ax_c.scatter(x, y, s=14, color="k", edgecolor="w", linewidth=0.3, zorder=3, label="data")
+    ax_c.set(xlabel="x", ylabel="y", title=f"{kind} predictive samples", ylim=ylim)
+    ax_c.legend(loc="upper left", fontsize=8)
+
+    ax_r.hist(implied_sd, bins=60, range=sd_range, density=True, color="C0", alpha=0.6,
+              label=f"{kind.lower()} draws")
+    ax_r.axvline(obs_sd, color="k", lw=1.5, label=f"observed sd = {obs_sd:.2f}")
+    ax_r.set(xlabel="standard deviation implied by each draw", ylabel="density",
+             title=f"{kind} predictive spread", xlim=sd_range)
+    ax_r.legend(loc="upper right", fontsize=8)
+
+    fig.suptitle(f"{kind} predictive: the density, sample draws and the implied spread")
+    fig.tight_layout()
+    save(fig, f"{kind.lower()}_predictive.png")
+
+
+def fig_prior_predictive(model: LinearGaussian, x, y) -> None:
+    """The prior predictive three ways, before any data is seen."""
+    rng = np.random.default_rng(11)
+    line_draws = model.prior_draws(120, rng)
+    draws = model.prior_draws(8000, rng)
+    _predictive_panels(model, draws, line_draws, x, y, "Prior")
 
 
 def fig_posterior_marginals(model, post, beta_true, sigma_true) -> None:
@@ -113,24 +196,9 @@ def fig_posterior_marginals(model, post, beta_true, sigma_true) -> None:
 
 
 def fig_posterior_predictive(model, post, x, y) -> None:
-    """The posterior mean line with credible and predictive bands, over the data."""
-    grid_x = np.linspace(-2.8, 2.8, 120)
-    grid_X = np.column_stack([np.ones_like(grid_x), grid_x])
-    lines = model.predictive_draws(post, grid_X)
-    preds = model.predictive_draws(post, grid_X, np.random.default_rng(14))
-    mean_line = lines.mean(0)
-    cred_lo, cred_hi = np.quantile(lines, [0.05, 0.95], axis=0)
-    pred_lo, pred_hi = np.quantile(preds, [0.05, 0.95], axis=0)
-
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.fill_between(grid_x, pred_lo, pred_hi, color="C0", alpha=0.15, label="90% predictive band")
-    ax.fill_between(grid_x, cred_lo, cred_hi, color="C0", alpha=0.35,
-                    label="90% credible band for the line")
-    ax.plot(grid_x, mean_line, color="C0", lw=2, label="posterior mean line")
-    ax.scatter(x, y, s=18, color="k", zorder=3, label="data")
-    ax.set(xlabel="x", ylabel="y", title="Posterior predictive: best line with bounds")
-    ax.legend(fontsize=8)
-    save(fig, "posterior_predictive.png")
+    """The posterior predictive three ways, from the sampler's draws."""
+    idx = np.random.default_rng(13).choice(post.shape[0], 150, replace=False)
+    _predictive_panels(model, post, post[idx], x, y, "Posterior")
 
 
 def fig_trace(draws) -> None:
