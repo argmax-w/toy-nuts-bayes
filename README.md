@@ -4,14 +4,14 @@ A No-U-Turn Sampler written from scratch in pure Python: leapfrog integration,
 recursive tree doubling, the no-U-turn criterion and multinomial trajectory
 sampling, with a diagnostic and calibration suite. 
 
-It is
-written for clarity rather than speed, and it is held to a hard standard. The
+Written for clarity rather than speed, it is still held to a hard standard. The
 sampler is run on a conjugate Bayesian linear regression whose posterior is
 Normal-Inverse-Gamma in closed form, so every number it produces can be checked
 against the exact answer.
 
-The check now follows: the filled histograms are the sampler's posterior, the black
-outline is a large i.i.d. draw from the closed-form posterior, and they overlap well.
+The picture below overlays the sampler's posterior (the filled histograms) on a
+large i.i.d. draw from the closed-form posterior (the black outline); the two
+match closely.
 
 ![Sampled posterior against the closed-form posterior](assets/posterior_marginals.png)
 
@@ -37,11 +37,17 @@ range of outcomes and pays no attention to where the points actually fall.
 ![Prior predictive: the density, sample lines and the spread it implies](assets/prior_predictive.png)
 
 Three views of the same prior predictive: the marginal density
-$p(\tilde y \mid \tilde x) = \mathbb{E}_\theta[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{S}\sum_s p(\tilde y \mid \tilde x, \theta_s)$
+
+$$
+p(\tilde y \mid \tilde x) = \mathbb{E}_\theta[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{S}\sum_s p(\tilde y \mid \tilde x, \theta_s)
+$$
+
 with its central 95% interval, the sample lines and the standard deviation each
 draw implies against the observed value. The density averages the Gaussian
 likelihood over the draws, which integrates the observation noise out per draw,
 and the interval inverts the same mixture, so nothing about $\tilde y$ is sampled.
+One colour convention runs throughout ([`plotting.py`](src/toynuts/plotting.py)):
+cool for the prior, warm for the posterior, black for the data.
 
 Because the prior is conjugate, the posterior is available in closed form, which
 is the whole point: it gives an exact target to sample against.
@@ -77,20 +83,28 @@ well-scaled target.
 
 ## The answer
 
-Run four chains and the posterior collapses from the wide prior onto a tight band
-that follows the data. This is the first picture in this README - the sampled
-marginals laid over the closed-form posterior, including the scale as
-$u = \log \sigma$, the space the sampler actually works in. The agreement holds
-quantitatively: every sampled posterior mean is within 0.71 MCSE of its exact
-value and the sampled standard deviations match to within 2%, so the sampler
-shows no bias and the right width.
+Run four chains and the posterior collapses onto a tight band along the data,
+the first figure above: the sampled marginals over the closed-form posterior,
+including the scale $u = \log \sigma$. Every sampled posterior mean lands within
+0.71 MCSE of its exact value and the standard deviations match to within 2%.
+
+Laid against the prior, the same parameter densities show the contraction
+directly: the wide dashed prior collapses onto the solid posterior, the scale
+shown both as $\sigma$ and as $u = \log \sigma$.
+
+![Prior against posterior for each parameter](assets/marginals_overlay.png)
 
 The posterior predictive is the same three views as the prior, now averaged over
-the sampler's own draws,
-$p(\tilde y \mid \tilde x) = \mathbb{E}_{\theta \mid y}[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{S}\sum_s p(\tilde y \mid \tilde x, \theta_s)$:
-the density and its central 95% interval, the sample lines and the standard
-deviation each draw implies. The wide prior band has collapsed onto a tight one
-that tracks the data, and the implied spread concentrates on the observed value.
+the sampler's own draws:
+
+$$
+p(\tilde y \mid \tilde x) = \mathbb{E}_{\theta \mid y}[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{S}\sum_s p(\tilde y \mid \tilde x, \theta_s).
+$$
+
+These are the density and its central 95% interval, the sample lines and the
+standard deviation each draw implies. The wide prior band has collapsed onto a
+tight one that tracks the data, and the implied spread concentrates on the
+observed value.
 
 ![Posterior predictive: the density, sample draws and the spread it implies](assets/posterior_predictive.png)
 
@@ -104,18 +118,23 @@ The convergence diagnostics are all computed from scratch in
 [`diagnostics.py`](src/toynuts/diagnostics.py), no ArviZ. Across four chains of
 2000 draws each:
 
-| diagnostic            | result            | pass mark         |
-|-----------------------|-------------------|-------------------|
-| split-Rhat (max)      | 1.0005            | at or below 1.01  |
-| bulk ESS (min)        | 5200              | above 400         |
-| tail ESS (min)        | 4291              | above 400         |
-| divergences           | 0                 | at or near 0      |
-| max tree depth        | 3                 | below the cap of 10 |
-| E-BFMI                | 0.93 to 1.03      | above 0.3         |
+| diagnostic            | result            | pass mark           | status |
+|-----------------------|-------------------|---------------------|--------|
+| split-Rhat (max)      | 1.0005            | at or below 1.01    | green  |
+| bulk ESS (min)        | 5200              | above 400           | green  |
+| tail ESS (min)        | 4291              | above 400           | green  |
+| divergences           | 0                 | at or near 0        | green  |
+| max tree depth        | 3                 | below the cap of 10 | green  |
+| E-BFMI                | 0.93 to 1.03      | above 0.3           | green  |
+
+The status column is the traffic-light coding from `diagnostic_status` (green
+pass, amber inspect, red warn); the diagnostics notebook shades its table cells
+with it.
 
 The traces are fuzzy horizontal bands with no drift or sticking, and the four
 per-chain densities lie on top of one another, which is what split-Rhat near 1
-then confirms.
+then confirms. The notebook adds the per-chain rank plots and autocorrelation
+that corroborate this.
 
 ![Traces and per-chain posteriors](assets/trace.png)
 
@@ -128,41 +147,50 @@ distribution, and E-BFMI condenses that comparison into a number near one here.
 
 ## Is the uncertainty honest?
 
-Convergence says the sampler explored the posterior. Calibration asks whether
-that posterior's uncertainty is honest, and it is checked three ways, all from
-scratch in [`calibration.py`](src/toynuts/calibration.py).
+Convergence only shows the chains explored the posterior, not that the
+uncertainty they report is trustworthy. The checks below test that, all from
+scratch in [`calibration.py`](src/toynuts/calibration.py); each averages the
+per-draw Gaussian CDF over the draws, so nothing about $\tilde y$ is sampled and
+the conjugate shortcut is not used.
 
-The probability integral transform evaluates the posterior predictive CDF at each
-held-out point. If the predictive is calibrated these values are $\mathrm{Uniform}(0, 1)$.
-The histogram sits inside its per-bin band and the cumulative departure from
-uniform stays inside its pointwise band, with a mean of 0.510 against the ideal
-0.5.
+The headline check is the leave-one-out PIT: the predictive CDF at each training
+point, reweighted by Pareto-smoothed importance sampling so the point is scored as
+if held out. These should be $\mathrm{Uniform}(0, 1)$, and they are: the ECDF
+stays inside its 95% simultaneous band, with mean 0.49 and largest Pareto $\hat k$
+0.21 (below the 0.7 reliability limit). The held-out and stratified-by-$x$
+versions are in the notebook.
 
-![PIT histogram and cumulative departure from uniform](assets/pit.png)
+![LOO-PIT histogram and cumulative departure from uniform](assets/loo_pit.png)
 
-Read as a calibration curve, the same idea becomes quantile coverage: a nominal
-90% interval should contain about 90% of held-out points. The empirical coverage
-tracks the diagonal.
+Read as a calibration curve, the same averaged CDF gives quantile coverage on the
+held-out set, each interval recovered by inverting the Rao-Blackwellised PIT
+rather than from sampled replicates. The empirical coverage tracks the diagonal.
 
 ![Quantile coverage against the nominal level](assets/coverage.png)
 
-Simulation-based calibration tests the inference itself rather than one dataset.
-Drawing parameters from the prior, simulating data, refitting and recording the
-rank of each true value among its posterior draws, the ranks must be uniform when
-the sampler targets the correct posterior. A lean towards the edges would mean
-posteriors that are too narrow, a central hump too wide.
+Among calibrated models the sharpest is preferred, so the notebook also reports
+proper scores: the PSIS-LOO expected log predictive density is $-115.4 \pm 6.0$
+with $p_\text{loo} = 2.8$ against three parameters, and the mean CRPS on the
+held-out set is 0.56.
 
-![SBC rank histograms](assets/sbc.png)
+Simulation-based calibration tests the inference itself, not one dataset: draw
+parameters from the prior, simulate data, refit and rank each true value among
+its posterior draws. Those ranks are uniform under a correct sampler, and here
+each parameter's ECDF stays inside its 95% simultaneous band (a lean to the edges
+would mean posteriors too narrow, a central hump too wide).
 
-A flat PIT, coverage on the diagonal and uniform SBC ranks all point the same
-way: the posterior predictive is calibrated on held-out data and the sampler
-recovers the prior-to-posterior map without bias.
+![SBC ranks as ECDF minus uniform with simultaneous bands](assets/sbc.png)
+
+The LOO-PIT, coverage, Pareto $\hat k$ and SBC checks agree: the posterior
+predictive is calibrated out-of-sample and in-sample, with no sign that the
+sampler's prior-to-posterior map is biased.
 
 ## Layout
 
 ```
 src/toynuts/      the package: transforms, hamiltonian, integrators, trajectory,
-                  transition, sampler, diagnostics, calibration, io and the models
+                  transition, sampler, diagnostics, calibration, plotting, io
+                  and the models
 scripts/          run_linear_gaussian.py, make_plots.py, make_readme_figures.py
 tests/            analytic and independently referenced checks
 notebooks/        01_results, 02_diagnostics, 03_calibration, the narrative above
@@ -198,8 +226,19 @@ references: split-Rhat near 1 on i.i.d. draws, ESS against the AR(1) formula and
 E-BFMI against a controlled energy series. The calibration functions are checked
 against the cases where the answer is known: a uniform PIT and nominal coverage
 for a matched predictive, and uniform ranks in the exchangeable case SBC reduces
-to. The model's analytic gradient is checked against finite differences, which is
-the single most important test, since the dynamics ride on that gradient.
+to. The importance-sampling leave-one-out is checked against the exact conjugate
+leave-one-out predictive, which is Student-t in closed form: the PSIS-LOO elpd
+and LOO-PIT match it closely. The model's analytic gradient is checked against
+finite differences, which is the single most important test, since the dynamics
+ride on that gradient.
+
+## Reproducibility and compute
+
+Runs are reproducible: per-chain seeds spawn from one numpy `SeedSequence`, and
+`run_config` records the seeds, settings and library versions. The predictive
+checks stream over draws in chunks and average analytic per-draw densities, so
+peak memory follows the chunk size, not chains times draws times points; the SBC
+draws are thinned to the rank.
 
 ## Licence
 

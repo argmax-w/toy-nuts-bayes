@@ -8,6 +8,7 @@ the smoke target and the regression.
 
 from __future__ import annotations
 
+import platform
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,26 @@ from toynuts.sampler import _resolve_metric
 if TYPE_CHECKING:
     from toynuts.models.base import Model
     from toynuts.sampler import RunResult, SamplerConfig
+
+
+def versions() -> dict[str, str]:
+    """Record the software environment so a run can be reproduced exactly.
+
+    Captures the Python and core library versions alongside the seeds and sampler
+    settings already in the run config, per the reproducibility section of the
+    workflow. Libraries that are absent are simply skipped.
+
+    Returns:
+        A mapping of ``version_<name>`` to a version string.
+    """
+    out = {"version_python": platform.python_version()}
+    for name in ("numpy", "scipy", "pandas", "pyarrow", "matplotlib"):
+        try:
+            module = __import__(name)
+            out[f"version_{name}"] = getattr(module, "__version__", "unknown")
+        except ImportError:
+            continue
+    return out
 
 
 def to_dataframes(
@@ -81,6 +102,7 @@ def to_dataframes(
     }
     for i, value in enumerate(metric_diag):
         cfg[f"metric_diag_{i}"] = float(value)
+    cfg.update(versions())
     run_config_df = pd.DataFrame([cfg])
 
     return draws_df, sample_stats_df, run_config_df

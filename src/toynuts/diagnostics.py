@@ -270,6 +270,118 @@ def divergence_summary(sample_stats: pd.DataFrame) -> pd.Series:
     )
 
 
+def autocorr(draws: pd.DataFrame, max_lag: int = 40) -> pd.DataFrame:
+    """Per-parameter, per-chain autocorrelation, a corroboration of ESS.
+
+    Reuses the FFT autocovariance and normalises by the lag-0 value so each series
+    starts at 1. A chain that mixes well decays to zero within a few lags.
+
+    Args:
+        draws: Draws frame with ``chain``, ``draw`` and parameter columns.
+        max_lag: Largest lag to report.
+
+    Returns:
+        A long frame with columns ``param``, ``chain``, ``lag`` and ``acf``.
+    """
+    rows = []
+    for param in _param_cols(draws):
+        arr = _to_chains(draws, param)
+        lags = min(max_lag, arr.shape[1] - 1)
+        for chain in range(arr.shape[0]):
+            acov = _autocov(arr[chain])
+            acf = acov[: lags + 1] / acov[0]
+            for lag, value in enumerate(acf):
+                rows.append({"param": param, "chain": chain, "lag": lag, "acf": value})
+    return pd.DataFrame(rows)
+
+
+def chain_ranks(draws: pd.DataFrame, param: str) -> np.ndarray:
+    """Pooled ranks of one parameter, split back by chain, for rank plots.
+
+    All draws are ranked together, then reshaped to ``(n_chains, n_draws)``. Under
+    convergence each chain's ranks are uniform over the pooled range, so the
+    per-chain rank histograms are flat; this pairs with rank-normalised Rhat and
+    catches between-chain discrepancies more reliably than the raw trace.
+
+    Args:
+        draws: Draws frame with ``chain``, ``draw`` and parameter columns.
+        param: Parameter column to rank.
+
+    Returns:
+        Pooled ranks shaped ``(n_chains, n_draws)``.
+    """
+    arr = _to_chains(draws, param)
+    ranks = stats.rankdata(arr.ravel())
+    return ranks.reshape(arr.shape)
+
+
+# Traffic-light thresholds, following the workflow's diagnostic table. Boundaries
+# are treated as bands; an exact-equality test has measure zero.
+def diagnostic_status(metric: str, value: float) -> str:
+    """Map a diagnostic value to ``"green"``, ``"amber"`` or ``"red"``.
+
+    The thresholds follow the workflow: split-Rhat ``< 1.01 / [1.01, 1.02) / >= 1.02``;
+    bulk and tail ESS ``> 400 / [200, 400] / < 200``; E-BFMI ``> 0.3 / - / <= 0.3``;
+    divergences ``0 / a scattered few / numerous``.
+
+    Args:
+        metric: One of ``"r_hat"``, ``"ess"``, ``"e_bfmi"`` or ``"divergences"``.
+        value: The diagnostic value.
+
+    Returns:
+        The status string.
+    """
+    if metric == "r_hat":
+        return "green" if value < 1.01 else ("amber" if value < 1.02 else "red")
+    if metric == "ess":
+        return "green" if value > 400 else ("amber" if value >= 200 else "red")
+    if metric == "e_bfmi":
+        return "green" if value > 0.3 else "red"
+    if metric == "divergences":
+        return "green" if value == 0 else ("amber" if value <= 3 else "red")
+    raise ValueError(f"unknown metric {metric!r}")
+
+
+def diagnostic_report(
+    draws: pd.DataFrame, sample_stats: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Per-parameter Rhat and ESS with a traffic-light status beside each value.
+
+    The status columns are named ``<value>_status`` so a display layer can colour
+    the value cells and hide the status columns. Use ``plotting.style_table`` for
+    the coloured notebook view.
+
+    Args:
+        draws: Draws frame with ``chain``, ``draw`` and parameter columns.
+        sample_stats: Accepted for a uniform call signature; unused here.
+
+    Returns:
+        A frame indexed by parameter with ``mean``, ``sd``, ``r_hat``, ``ess_bulk``,
+        ``ess_tail`` and a ``*_status`` column for each diagnostic.
+    """
+    rhat = split_rhat(draws)
+    bulk = ess_bulk(draws)
+    tail = ess_tail(draws)
+    rows = {}
+    for param in _param_cols(draws):
+        arr = _to_chains(draws, param)
+        rows[param] = {
+            "mean": arr.mean(),
+            "sd": arr.std(ddof=1),
+            "r_hat": rhat[param],
+            "r_hat_status": diagnostic_status("r_hat", rhat[param]),
+            "ess_bulk": bulk[param],
+            "ess_bulk_status": diagnostic_status("ess", bulk[param]),
+            "ess_tail": tail[param],
+            "ess_tail_status": diagnostic_status("ess", tail[param]),
+        }
+    columns = [
+        "mean", "sd", "r_hat", "r_hat_status",
+        "ess_bulk", "ess_bulk_status", "ess_tail", "ess_tail_status",
+    ]
+    return pd.DataFrame(rows).T[columns]
+
+
 def summary(draws: pd.DataFrame, sample_stats: pd.DataFrame | None = None) -> pd.DataFrame:
     """Assemble the per-parameter diagnostic table.
 
