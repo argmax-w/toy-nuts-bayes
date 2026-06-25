@@ -40,7 +40,7 @@ Above are three views of the same prior predictive:
 - the marginal density (with its central 95% interval);
 
 $$
-p(\tilde y \mid \tilde x) = \mathbb{E}_\theta[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{S}\sum_s p(\tilde y \mid \tilde x, \theta_s)
+p(\tilde y \mid \tilde x) = \mathbb{E}_\theta[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{|S|}\sum_s p(\tilde y \mid \tilde x, \theta_s)
 $$
 
 - the sample lines; and
@@ -101,7 +101,7 @@ The posterior predictive is the same three views as the prior, now averaged over
 the sampler's own draws:
 
 $$
-p(\tilde y \mid \tilde x) = \mathbb{E}_{\theta \mid y}[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{S}\sum_s p(\tilde y \mid \tilde x, \theta_s).
+p(\tilde y \mid (\tilde x , D)) = \mathbb{E}_{\theta \mid D}[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{|S|}\sum_s p(\tilde y \mid \tilde x, \theta_s).
 $$
 
 These are the density and its central 95% interval, the sample lines and the
