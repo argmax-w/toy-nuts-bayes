@@ -36,17 +36,20 @@ range of outcomes and pays no attention to where the points actually fall.
 
 ![Prior predictive: the density, sample lines and the spread it implies](assets/prior_predictive.png)
 
-Three views of the same prior predictive: the marginal density
+Above are three views of the same prior predictive:
+- the marginal density (with its central 95% interval);
 
 $$
 p(\tilde y \mid \tilde x) = \mathbb{E}_\theta[p(\tilde y \mid \tilde x, \theta)] \approx \frac{1}{S}\sum_s p(\tilde y \mid \tilde x, \theta_s)
 $$
 
-with its central 95% interval, the sample lines and the standard deviation each
-draw implies against the observed value. The density averages the Gaussian
+- the sample lines; and
+- the standard deviation each draw implies against the observed value.
+
+The density averages the Gaussian
 likelihood over the draws, which integrates the observation noise out per draw,
 and the interval inverts the same mixture, so nothing about $\tilde y$ is sampled.
-One colour convention runs throughout ([`plotting.py`](src/toynuts/plotting.py)):
+One colour convention runs throughout the project:
 cool for the prior, warm for the posterior, black for the data.
 
 Because the prior is conjugate, the posterior is available in closed form, which
